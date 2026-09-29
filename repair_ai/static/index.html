@@ -52,7 +52,7 @@ const vdiode=(n,x,y,t,led)=>grp(n,line(x,y,x,y+22)+`<polygon points="${x-9},${y+
 const wire=(n,x1,x2,y)=>grp(n,`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" style="stroke-width:5"/>`+lab(n,(x1+x2)/2,y-9));
 const battery=(x,y1,y2,t)=>{const m=(y1+y2)/2;return grp('Vs',line(x,y1,x,m-5)+line(x-14,m-5,x+14,m-5)+line(x-7,m+3,x+7,m+3)+line(x,m+3,x,y2)+lab('+',x+18,m-6,'start')+lab(t,x-18,m+4,'end'));};
 function diagram(c){
-  const p=n=>c.parts.find(x=>x.name===n)||{value:0,kind:''};
+  const p=n=>(c.parts||[]).find(x=>x.name===n)||{value:0,kind:''};
   const fv=q=>q.kind==='supply'?q.value+' V':q.value>=1000?q.value/1000+'k Ω':q.value+' Ω';
   const L=n=>n+' '+fv(p(n)),id=c.id,X=60;let s;
   if(id==='bjt_switch'){
@@ -84,12 +84,13 @@ async function init(){
   $('circuit').onchange=()=>{checks={};build();};build();
 }
 function build(){
-  const c=cur();$('diagram').innerHTML=diagram(c);
+  const c=cur();
   $('inputs').innerHTML=c.probes.map(p=>`<div><label>V at ${p} (volts)</label><input id="in_${p}" type="number" step="any"></div>`).join('')
     +`<div><label>Supply current (mA)</label><input id="in_I" type="number" step="any"></div>`
     +(c.has_led?`<div><label>LED</label><select id="in_LED"><option value="">not observed</option><option>on</option><option>off</option></select></div>`:'');
   $('fault').innerHTML='<option value="">Healthy circuit</option>'+c.faults.map((f,i)=>`<option value="${i}">${esc(f.title)}</option>`).join('');
   $('out').innerHTML='';
+  try{$('diagram').innerHTML=diagram(c);}catch(e){$('diagram').innerHTML='<div class="mut">Diagram unavailable: restart the server (python -m repair_ai.server).</div>';}
 }
 function readings(){
   const c=cur(),r={};
