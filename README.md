@@ -13,7 +13,7 @@ the likely fault, the evidence, the next test to run, and how to repair it.
     python -m repair_ai.server        # web app -> http://127.0.0.1:8000
     python -m repair_ai.cli demo      # sample diagnoses
     python -m repair_ai.cli           # interactive
-    python tests/test_accuracy.py     # injects all 36 single faults and checks the diagnosis
+    python tests/test_accuracy.py     # injects all 60 single faults and checks the diagnosis
 
 ## Roadmap
 - [ ] Netlist input (custom circuits)

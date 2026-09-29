@@ -56,7 +56,7 @@ def test_server_api():
         base + u, json.dumps(b).encode(), {"Content-Type": "application/json"})))
     assert b"REPAIR-AI" in urllib.request.urlopen(base + "/").read()
     info = json.load(urllib.request.urlopen(base + "/api/circuits"))
-    assert len(info) == 3 and info[0]["faults"]
+    assert len(info) == 5 and info[0]["faults"]
     rd = post("/api/inject", {"circuit": "led_resistor", "component": "R1", "mode": "open"})
     res = post("/api/diagnose", {"circuit": "led_resistor", "readings": rd})
     assert res["status"] == "fault" and res["candidates"][0]["component"] == "R1"
