@@ -65,9 +65,12 @@ def diagnose(circuit_id, readings, checks=None):
         raise ValueError(f"Give at least one reading from {sorted(ref)}")
     ref_i = ref["I"]
  
+    spec = CIRCUITS[circuit_id]
+    if "_hyp" not in spec:          # nominal predictions for every hypothesis, computed once per circuit
+        spec["_hyp"] = [(cn, m, predict(base if cn is None else apply_fault(base, cn, m), probes, has_led))
+                        for cn, m in [(None, "healthy")] + faults_of(base)]
     rows = []
-    for comp_name, mode in [(None, "healthy")] + faults_of(base):
-        pred = predict(base if comp_name is None else apply_fault(base, comp_name, mode), probes, has_led)
+    for comp_name, mode, pred in spec["_hyp"]:
         errs = {k: _err(k, readings[k], pred[k], ref_i) for k in keys}
         rows.append({"comp": comp_name, "mode": mode, "pred": pred, "errs": errs,
                      "sse": sum(e * e for e in errs.values()), "worst": max(errs.values())})
