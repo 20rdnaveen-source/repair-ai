@@ -10,6 +10,7 @@ the likely fault, the evidence, the next test to run, and how to repair it.
 
 ## Run
     pip install -r requirements.txt
+    python -m repair_ai.server        # web app -> http://127.0.0.1:8000
     python -m repair_ai.cli demo      # sample diagnoses
     python -m repair_ai.cli           # interactive
     python tests/test_accuracy.py     # injects all 36 single faults and checks the diagnosis
@@ -17,5 +18,5 @@ the likely fault, the evidence, the next test to run, and how to repair it.
 ## Roadmap
 - [ ] Netlist input (custom circuits)
 - [ ] ML classifier trained on simulated faults
-- [ ] Web app (FastAPI + simple UI)
+- [x] Web app + interactive test loop (standard library only)
 - [ ] Schematic / photo upload (stretch)

@@ -1,10 +1,10 @@
 """Command line: `python -m repair_ai.cli` (interactive) or `python -m repair_ai.cli demo`."""
 import sys
-
+ 
 from .circuits import CIRCUITS
 from .diagnose import diagnose
-
-
+ 
+ 
 def report(result):
     print(f"\nCircuit: {result['circuit']}")
     for w in result["warnings"]:
@@ -15,24 +15,24 @@ def report(result):
         for e in c["evidence"]:
             print(f"   evidence: {e}")
         print(f"   fix: {c['repair']}")
-    print(f"\nNext test: {result['next_test']}\n")
-
-
+    print(f"\nNext test: {result['next_test']['text']}\n")
+ 
+ 
 DEMOS = [
     ("led_resistor", {"TP1": 5.0, "TP2": 0.05, "I": 0.0, "LED": "off"}),   # R1 open
     ("led_resistor", {"TP1": 5.0, "TP2": 0.0}),                            # ambiguous, partial readings
     ("led_resistor", {"TP1": 5.0, "TP2": 0.0, "LED": "off", "I": 0.02}),   # the note's contradictory example
     ("voltage_divider", {"TP0": 9.0, "TP2": 0.82}),
 ]
-
-
+ 
+ 
 def ask(prompt):
     try:
         return input(prompt).strip()
     except EOFError:
         return ""
-
-
+ 
+ 
 def interactive():
     ids = list(CIRCUITS)
     for i, cid in enumerate(ids, 1):
@@ -52,8 +52,8 @@ def interactive():
         if led in ("on", "off"):
             readings["LED"] = led
     report(diagnose(cid, readings))
-
-
+ 
+ 
 if __name__ == "__main__":
     if len(sys.argv) > 1 and sys.argv[1] == "demo":
         for cid, rd in DEMOS:
@@ -61,3 +61,4 @@ if __name__ == "__main__":
             report(diagnose(cid, rd))
     else:
         interactive()
+ 
