@@ -34,10 +34,19 @@ svg text{fill:var(--tx);stroke:none;font:11px system-ui,sans-serif}
 <div class="card"><h2>Circuit</h2><div id="diagram"></div>
 <div class="mut" style="margin-top:6px;text-align:center">Blue dots = test points · red = suspected component</div></div>
  
+<details class="card"><summary><b>Your own circuit (netlist)</b></summary>
+<div class="mut" style="margin:8px 0">One part per line: <code>V1 TP0 GND 5</code> · <code>J1 TP0 TP1</code> (wire) · <code>R1 TP1 TP2 330</code> · <code>D1 TP2 GND LED</code> (or DIODE) · <code>Q1 TPB TPC GND NPN</code>. GND is ground; every other node becomes a test point.</div>
+<textarea id="net" rows="7" style="width:100%;background:var(--bg);color:var(--tx);border:1px solid var(--line);border-radius:6px;padding:8px;font:13px monospace">V1 TP0 GND 9
+J1 TP0 TP1
+R1 TP1 TP2 4.7k
+R2 TP2 TP3 2.2k
+R3 TP3 GND 3.3k</textarea>
+<div class="row"><button onclick="loadNet()">Load circuit</button></div><div id="neterr" style="color:var(--bad);margin-top:6px"></div></details>
+ 
 <div id="out"></div>
 </main>
 <script>
-let circuits=[],checks={};const $=id=>document.getElementById(id);
+let circuits=[],checks={},last=null;const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const cur=()=>circuits.find(c=>c.id===$('circuit').value);
  
@@ -52,6 +61,8 @@ const vdiode=(n,x,y,t,led)=>grp(n,line(x,y,x,y+22)+`<polygon points="${x-9},${y+
 const wire=(n,x1,x2,y)=>grp(n,`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" style="stroke-width:5"/>`+lab(n,(x1+x2)/2,y-9));
 const battery=(x,y1,y2,t)=>{const m=(y1+y2)/2;return grp('Vs',line(x,y1,x,m-5)+line(x-14,m-5,x+14,m-5)+line(x-7,m+3,x+7,m+3)+line(x,m+3,x,y2)+lab('+',x+18,m-6,'start')+lab(t,x-18,m+4,'end'));};
 function diagram(c){
+  if(!['led_resistor','diode_resistor','voltage_divider','resistor_network','bjt_switch'].includes(c.id))
+    return '<table><tr><th>Part</th><th>Type</th><th>Connected to</th><th>Value</th></tr>'+c.parts.map(q=>`<tr><td>${q.name}</td><td>${q.kind}</td><td>${q.nodes.join(' → ')}</td><td>${q.kind==='resistor'||q.kind==='supply'?q.value:''}</td></tr>`).join('')+'</table>';
   const p=n=>(c.parts||[]).find(x=>x.name===n)||{value:0,kind:''};
   const fv=q=>q.kind==='supply'?q.value+' V':q.value>=1000?q.value/1000+'k Ω':q.value+' Ω';
   const L=n=>n+' '+fv(p(n)),id=c.id,X=60;let s;
@@ -69,6 +80,35 @@ function diagram(c){
   }
   return `<svg viewBox="0 0 460 190">${s}</svg>`;
 }
+function printReport(){
+  if(!last)return;const c=cur(),d=last;
+  const label=k=>k==='I'?'Supply current':k==='LED'?'LED':'V at '+k;
+  const rows=d.table.map(t=>`<tr><td>${label(t.key)}</td><td>${t.expected}</td><td>${t.observed}</td><td>${t.ok===null?'':t.ok?'OK':'DEVIATES'}</td></tr>`).join('');
+  const st={fault:'FAULT DETECTED',no_fault:'NO FAULT DETECTED',inconsistent:'READINGS DO NOT FIT ANY SINGLE FAULT'}[d.status];
+  const cand=d.candidates.map((x,i)=>`<div class="c"><b>${i+1}. ${esc(x.title)}</b>${x.confidence===null?' (closest match)':' &ndash; relative confidence '+Math.round(x.confidence*100)+'%'}<ul>${x.evidence.map(e=>`<li>${esc(e)}</li>`).join('')}</ul><div><b>Repair:</b> ${esc(x.repair)}</div></div>`).join('');
+  const ck=Object.entries(d.checks).map(([k,v])=>`${k}: ${v}`).join(', ')||'none yet';
+  const css=`body{font:14px system-ui,sans-serif;max-width:800px;margin:24px auto;padding:0 16px;color:#111}h1{margin:0}h2{font-size:15px;border-bottom:1px solid #999;padding-bottom:3px;margin-top:22px}
+table{width:100%;border-collapse:collapse}td,th{border:1px solid #bbb;padding:5px 8px;text-align:left}th{background:#eee}
+.b{padding:10px;font-weight:700;border-radius:4px;margin:12px 0}.fault{background:#fde2e2;color:#a40e0e}.no_fault{background:#dcf5e3;color:#116329}.inconsistent{background:#fdf0c9;color:#7a5a00}
+.c{margin:10px 0}.mut{color:#555;font-size:12px}svg{max-width:480px;width:100%;display:block;margin:0 auto}
+svg line,svg polyline,svg polygon{stroke:#333;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}svg text{fill:#111;stroke:none;font:11px sans-serif}
+.tp circle{fill:#1f6feb;stroke:none}.tp text{fill:#1f6feb}.tp .val{fill:#111;font-weight:700}.comp.hl *{stroke:#d1242f}.comp.hl text{fill:#d1242f;stroke:none}
+@media print{.noprint{display:none}}`;
+  const html=`<!DOCTYPE html><html><head><meta charset="utf-8"><title>REPAIR-AI diagnostic report</title><style>${css}</style></head><body>
+<button class="noprint" onclick="window.print()" style="float:right;padding:8px 14px">Print / Save as PDF</button>
+<h1>REPAIR-AI</h1><div class="mut">Circuit diagnostic report &middot; ${new Date().toLocaleString()}</div>
+<h2>Circuit</h2><div>${esc(d.circuit)}</div>${$('diagram').innerHTML}
+<div class="b ${d.status}">${st}</div>${d.warnings.map(w=>`<div class="mut">Warning: ${esc(w)}</div>`).join('')}
+<h2>Expected vs observed</h2><table><tr><th>Parameter</th><th>Expected (healthy)</th><th>Observed</th><th>Status</th></tr>${rows}</table>
+<h2>Probable ${d.consistent?'faults':'closest matches'}</h2>${cand}
+<h2>Tests performed</h2><div>${esc(ck)}</div>
+<h2>Recommended next test</h2><div>${esc(d.next_test.text)}</div>
+<p class="mut" style="margin-top:28px">Generated by REPAIR-AI: model-based diagnosis for low-voltage DC circuits, single-fault assumption. Confidence is a relative ranking between candidate faults, not a calibrated probability. Verify with the suggested test before replacing parts.</p>
+</body></html>`;
+  const w=window.open('','_blank');
+  if(!w){alert('Allow pop-ups for this page to open the report.');return;}
+  w.document.write(html);w.document.close();
+}
 function mark(d){
   document.querySelectorAll('.comp.hl').forEach(e=>e.classList.remove('hl'));
   document.querySelectorAll('.val').forEach(e=>e.textContent='');
@@ -77,11 +117,21 @@ function mark(d){
 }
  
  
-async function init(){
-  try{circuits=await (await fetch('/api/circuits')).json();}
-  catch(e){$('out').innerHTML='<div class="card banner inconsistent">Cannot reach the REPAIR-AI server. Do not open this file directly: run <b>python -m repair_ai.server</b> in the terminal, then open <b>http://127.0.0.1:8000</b> in your browser.</div>';return;}
+async function loadCircuits(sel){
+  circuits=await (await fetch('/api/circuits')).json();
   $('circuit').innerHTML=circuits.map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');
-  $('circuit').onchange=()=>{checks={};build();};build();
+  if(sel)$('circuit').value=sel;
+  checks={};build();
+}
+async function init(){
+  try{await loadCircuits();}
+  catch(e){$('out').innerHTML='<div class="card banner inconsistent">Cannot reach the REPAIR-AI server. Do not open this file directly: run <b>python -m repair_ai.server</b> in the terminal, then open <b>http://127.0.0.1:8000</b> in your browser.</div>';return;}
+  $('circuit').onchange=()=>{checks={};build();};
+}
+async function loadNet(){
+  const d=await post('/api/netlist',{text:$('net').value});
+  if(d.error){$('neterr').textContent=d.error.replace('bad request: ','');return;}
+  $('neterr').textContent='';await loadCircuits(d.id);
 }
 function build(){
   const c=cur();
@@ -126,7 +176,7 @@ function addReading(key){
 }
 function show(d){
   if(d.error){$('out').innerHTML=`<div class="card">${esc(d.error)}</div>`;return;}
-  mark(d);
+  mark(d);last=d;
   const label={fault:'FAULT DETECTED',no_fault:'NO FAULT DETECTED',inconsistent:'READINGS DO NOT FIT ANY SINGLE FAULT'}[d.status];
   let h=`<div class="card"><h2>2 · Diagnostic report</h2><div class="banner ${d.status}">${label}</div>`;
   d.warnings.forEach(w=>h+=`<div class="mut" style="color:var(--warn)">⚠ ${esc(w)}</div>`);
@@ -147,7 +197,7 @@ function show(d){
   if(n.type==='measure')h+=`<div class="row"><div style="width:160px"><label>Result (${n.key==='I'?'mA':n.key==='LED'?'on/off':'volts'})</label><input id="nt"></div><button onclick="addReading('${n.key}')">Add reading</button></div>`;
   const ck=Object.entries(d.checks);
   if(ck.length)h+=`<div class="mut" style="margin-top:10px">Tests so far: ${ck.map(([k,v])=>`<span class="tag">${k}: ${v}</span>`).join('')}</div>`;
-  $('out').innerHTML=h+'</div>';
+  $('out').innerHTML=h+'</div><div class="card"><button class="alt" onclick="printReport()">Open printable report (save as PDF)</button></div>';
 }
 init();
 </script></body></html>

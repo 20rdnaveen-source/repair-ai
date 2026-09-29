@@ -6,6 +6,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
  
 from .circuits import CIRCUITS, apply_fault, build, describe, faults_of
 from .diagnose import diagnose, predict
+from .netlist import register
  
 PAGE = os.path.join(os.path.dirname(__file__), "static", "index.html")
  
@@ -17,7 +18,7 @@ def circuits_info():
         by_name = {c["name"]: c for c in base}
         out.append({"id": cid, "title": spec["title"], "probes": spec["probes"],
                     "has_led": any(c["kind"] == "led" for c in base),
-                    "parts": [{"name": c["name"], "kind": c["kind"], "value": c["value"]} for c in base],
+                    "parts": [{"name": c["name"], "kind": c["kind"], "value": c["value"], "nodes": list(c["n"])} for c in base],
                     "faults": [{"component": n, "mode": m, "title": describe(by_name[n], m)[0]}
                                for n, m in faults_of(base)]})
     return out
@@ -55,6 +56,8 @@ class Handler(BaseHTTPRequestHandler):
             req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
             if self.path == "/api/diagnose":
                 self._send(200, diagnose(req["circuit"], req.get("readings", {}), req.get("checks", {})))
+            elif self.path == "/api/netlist":
+                self._send(200, {"id": register(req["text"])})
             elif self.path == "/api/inject":
                 self._send(200, inject(req["circuit"], req.get("component"), req.get("mode")))
             else:
@@ -75,4 +78,3 @@ def main(port=8000):
  
 if __name__ == "__main__":
     main()
- 
