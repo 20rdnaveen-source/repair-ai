@@ -10,3 +10,5 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
       - run: python tests/test_accuracy.py
+      - run: python tests/test_core.py
+ 
