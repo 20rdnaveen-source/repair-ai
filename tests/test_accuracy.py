@@ -45,6 +45,28 @@ def test_check_loop():
     assert ok["candidates"][0]["component"] == "D1"
  
  
+def test_netlist():
+    from repair_ai.netlist import NetlistError, register
+    cid = register("V1 TP0 GND 9\nJ1 TP0 TP1\nR1 TP1 TP2 4.7k\nR2 TP2 TP3 2.2k\nR3 TP3 GND 3.3k")
+    base = build(cid)
+    assert len(faults_of(base)) == 1 * 2 + 1 + 3 * 4
+    rd = predict(apply_fault(base, "R2", "open"), CIRCUITS[cid]["probes"], False)
+    assert diagnose(cid, rd)["candidates"][0]["component"] == "R2"
+    for bad in ("R1 A B", "X1 A B 5", "V1 A GND 500\nR1 A GND 1k", "R1 A GND 1k", "V1 A GND 5\nD1 A GND\nD1 A GND"):
+        try:
+            register(bad); assert False, bad
+        except NetlistError:
+            pass
+    CIRCUITS.pop("custom", None)
+ 
+ 
+def test_evaluation_runs():
+    from repair_ai.evaluate import run
+    per, _ = run(0.05, 2, 1)
+    n = sum(c["n"] for c in per.values())
+    assert n > 100 and sum(c["top3"] for c in per.values()) / n > 0.9
+ 
+ 
 def test_server_api():
     import json, threading, urllib.request
     from http.server import ThreadingHTTPServer
@@ -66,6 +88,6 @@ def test_server_api():
  
  
 if __name__ == "__main__":
-    test_all_single_faults(); test_contradictory_readings_are_flagged(); test_healthy_circuit(); test_check_loop(); test_server_api()
+    test_all_single_faults(); test_contradictory_readings_are_flagged(); test_healthy_circuit(); test_check_loop(); test_netlist(); test_evaluation_runs(); test_server_api()
     print("all tests passed")
  
