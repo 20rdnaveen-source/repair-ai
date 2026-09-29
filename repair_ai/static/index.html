@@ -16,30 +16,75 @@ button.alt{background:var(--line);color:var(--tx)}button.ok{background:var(--ok)
 table{width:100%;border-collapse:collapse}td,th{text-align:left;padding:6px 4px;border-bottom:1px solid var(--line)}th{color:var(--mut);font-size:12px}
 .bar{height:6px;background:var(--line);border-radius:3px;margin:4px 0 8px}.bar i{display:block;height:100%;background:var(--acc);border-radius:3px}
 .cand{border-top:1px solid var(--line);padding-top:10px;margin-top:10px}.mut{color:var(--mut);font-size:13px}.tag{display:inline-block;padding:1px 8px;border-radius:10px;background:var(--line);font-size:12px;margin:0 4px 4px 0}
+svg{max-width:520px;width:100%;display:block;margin:0 auto}
+svg line,svg polyline,svg polygon{stroke:#8b98a5;stroke-width:2;fill:none;stroke-linecap:round;stroke-linejoin:round}
+svg text{fill:var(--tx);stroke:none;font:11px system-ui,sans-serif}
+.tp circle{fill:var(--acc);stroke:none}.tp text{fill:var(--acc)}.tp .val{fill:var(--tx);font-weight:700}
+.comp.hl *{stroke:var(--bad)}.comp.hl text{fill:var(--bad);stroke:none}
 </style></head><body><main>
 <h1>REPAIR-AI</h1><div class="sub">Explainable circuit troubleshooting: Fault → Reason → Verify → Repair</div>
-
+ 
 <div class="card"><h2>1 · Circuit and readings</h2>
 <label>Circuit</label><select id="circuit"></select>
 <div class="grid" id="inputs" style="margin-top:10px"></div>
 <div class="row"><button onclick="run()">Diagnose</button><button class="alt" onclick="clearAll()">Clear</button></div>
 <div class="row"><div style="flex:1;min-width:200px"><label>Demo: break the circuit for me</label><select id="fault"></select></div>
 <button class="alt" onclick="injectFault()">Inject fault</button></div></div>
-
+ 
+<div class="card"><h2>Circuit</h2><div id="diagram"></div>
+<div class="mut" style="margin-top:6px;text-align:center">Blue dots = test points · red = suspected component</div></div>
+ 
 <div id="out"></div>
 </main>
 <script>
 let circuits=[],checks={};const $=id=>document.getElementById(id);
 const esc=s=>String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
 const cur=()=>circuits.find(c=>c.id===$('circuit').value);
-
+ 
+const line=(a,b,c,d)=>`<line x1="${a}" y1="${b}" x2="${c}" y2="${d}"/>`;
+const lab=(t,x,y,a)=>`<text x="${x}" y="${y}" text-anchor="${a||'middle'}">${t}</text>`;
+const grp=(n,s)=>`<g class="comp" id="c_${n}">${s}</g>`;
+const tp=(n,x,y,s)=>{const a=s==='r'?['start',x+9,y-2,x+9,y+12]:s==='l'?['end',x-9,y-2,x-9,y+12]:['middle',x,y-9,x,y+18];
+  return `<g class="tp"><circle cx="${x}" cy="${y}" r="4"/><text text-anchor="${a[0]}" x="${a[1]}" y="${a[2]}">${n}</text><text class="val" id="v_${n}" text-anchor="${a[0]}" x="${a[3]}" y="${a[4]}"></text></g>`;};
+const hres=(n,x,y,t)=>grp(n,`<polyline points="${x},${y} ${x+10},${y} ${x+15},${y-8} ${x+25},${y+8} ${x+35},${y-8} ${x+45},${y+8} ${x+55},${y-8} ${x+60},${y} ${x+70},${y}"/>`+lab(t,x+35,y-16));
+const vres=(n,x,y,t,left)=>grp(n,`<polyline points="${x},${y} ${x},${y+10} ${x-8},${y+15} ${x+8},${y+25} ${x-8},${y+35} ${x+8},${y+45} ${x-8},${y+55} ${x},${y+60} ${x},${y+70}"/>`+(left?lab(t,x-16,y+38,'end'):lab(t,x+16,y+38,'start')));
+const vdiode=(n,x,y,t,led)=>grp(n,line(x,y,x,y+22)+`<polygon points="${x-9},${y+22} ${x+9},${y+22} ${x},${y+40}"/>`+line(x-9,y+40,x+9,y+40)+line(x,y+40,x,y+62)+(led?line(x+12,y+22,x+20,y+14)+line(x+16,y+30,x+24,y+22):'')+lab(t,x+30,y+34,'start'));
+const wire=(n,x1,x2,y)=>grp(n,`<line x1="${x1}" y1="${y}" x2="${x2}" y2="${y}" style="stroke-width:5"/>`+lab(n,(x1+x2)/2,y-9));
+const battery=(x,y1,y2,t)=>{const m=(y1+y2)/2;return grp('Vs',line(x,y1,x,m-5)+line(x-14,m-5,x+14,m-5)+line(x-7,m+3,x+7,m+3)+line(x,m+3,x,y2)+lab('+',x+18,m-6,'start')+lab(t,x-18,m+4,'end'));};
+function diagram(c){
+  const p=n=>c.parts.find(x=>x.name===n)||{value:0,kind:''};
+  const fv=q=>q.kind==='supply'?q.value+' V':q.value>=1000?q.value/1000+'k Ω':q.value+' Ω';
+  const L=n=>n+' '+fv(p(n)),id=c.id,X=60;let s;
+  if(id==='bjt_switch'){
+    s=battery(X,30,170,L('Vs'))+line(X,30,300,30)+line(X,170,300,170)+tp('TP0',85,30)
+     +line(180,30,180,50)+vres('Rb',180,50,L('Rb'))+line(180,120,180,135)+tp('TPB',180,135,'l')+line(180,135,270,135)
+     +line(300,30,300,45)+vres('Rc',300,45,L('Rc'))+tp('TPC',300,115,'r')
+     +grp('Q1',line(270,120,270,160)+line(270,132,300,115)+line(270,148,300,165)+line(300,165,300,170)+`<polygon points="286,158 297,164 290,150"/>`+lab('Q1 NPN',312,150,'start'));
+  }else{
+    const end=id==='resistor_network'?340:300;
+    s=battery(X,30,170,L('Vs'))+line(X,30,100,30)+wire('J1',100,130,30)+line(130,30,160,30)+hres('R1',160,30,L('R1'))+line(230,30,end,30)+line(X,170,end,170)+tp('TP0',85,30)+tp('TP1',145,30)+tp('TP2',250,30);
+    if(id==='led_resistor'||id==='diode_resistor'){const led=id==='led_resistor';s+=line(300,30,300,50)+vdiode('D1',300,50,'D1 '+(led?'LED':'diode'),led)+line(300,112,300,170);}
+    else if(id==='voltage_divider')s+=line(300,30,300,50)+vres('R2',300,50,L('R2'))+line(300,120,300,170);
+    else s+=line(300,30,300,50)+vres('R2',300,50,L('R2'),true)+line(300,120,300,170)+line(340,30,340,50)+vres('R3',340,50,L('R3'))+line(340,120,340,170);
+  }
+  return `<svg viewBox="0 0 460 190">${s}</svg>`;
+}
+function mark(d){
+  document.querySelectorAll('.comp.hl').forEach(e=>e.classList.remove('hl'));
+  document.querySelectorAll('.val').forEach(e=>e.textContent='');
+  d.table.forEach(t=>{const e=$('v_'+t.key);if(e&&t.observed!=='-')e.textContent=t.observed;});
+  d.candidates.filter(c=>c.component&&c.confidence>=0.3).forEach(c=>{const e=$('c_'+c.component);if(e)e.classList.add('hl');});
+}
+ 
+ 
 async function init(){
-  circuits=await (await fetch('/api/circuits')).json();
+  try{circuits=await (await fetch('/api/circuits')).json();}
+  catch(e){$('out').innerHTML='<div class="card banner inconsistent">Cannot reach the REPAIR-AI server. Do not open this file directly: run <b>python -m repair_ai.server</b> in the terminal, then open <b>http://127.0.0.1:8000</b> in your browser.</div>';return;}
   $('circuit').innerHTML=circuits.map(c=>`<option value="${c.id}">${esc(c.title)}</option>`).join('');
   $('circuit').onchange=()=>{checks={};build();};build();
 }
 function build(){
-  const c=cur();
+  const c=cur();$('diagram').innerHTML=diagram(c);
   $('inputs').innerHTML=c.probes.map(p=>`<div><label>V at ${p} (volts)</label><input id="in_${p}" type="number" step="any"></div>`).join('')
     +`<div><label>Supply current (mA)</label><input id="in_I" type="number" step="any"></div>`
     +(c.has_led?`<div><label>LED</label><select id="in_LED"><option value="">not observed</option><option>on</option><option>off</option></select></div>`:'');
@@ -80,6 +125,7 @@ function addReading(key){
 }
 function show(d){
   if(d.error){$('out').innerHTML=`<div class="card">${esc(d.error)}</div>`;return;}
+  mark(d);
   const label={fault:'FAULT DETECTED',no_fault:'NO FAULT DETECTED',inconsistent:'READINGS DO NOT FIT ANY SINGLE FAULT'}[d.status];
   let h=`<div class="card"><h2>2 · Diagnostic report</h2><div class="banner ${d.status}">${label}</div>`;
   d.warnings.forEach(w=>h+=`<div class="mut" style="color:var(--warn)">⚠ ${esc(w)}</div>`);
@@ -104,3 +150,4 @@ function show(d){
 }
 init();
 </script></body></html>
+ 

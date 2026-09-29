@@ -3,13 +3,13 @@ import json
 import os
 import random
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-
+ 
 from .circuits import CIRCUITS, apply_fault, build, describe, faults_of
 from .diagnose import diagnose, predict
-
+ 
 PAGE = os.path.join(os.path.dirname(__file__), "static", "index.html")
-
-
+ 
+ 
 def circuits_info():
     out = []
     for cid, spec in CIRCUITS.items():
@@ -17,11 +17,12 @@ def circuits_info():
         by_name = {c["name"]: c for c in base}
         out.append({"id": cid, "title": spec["title"], "probes": spec["probes"],
                     "has_led": any(c["kind"] == "led" for c in base),
+                    "parts": [{"name": c["name"], "kind": c["kind"], "value": c["value"]} for c in base],
                     "faults": [{"component": n, "mode": m, "title": describe(by_name[n], m)[0]}
                                for n, m in faults_of(base)]})
     return out
-
-
+ 
+ 
 def inject(circuit, component, mode):
     """Readings a multimeter would show for this fault (with ~1 % meter noise)."""
     base = build(circuit)
@@ -29,8 +30,8 @@ def inject(circuit, component, mode):
     has_led = any(c["kind"] == "led" for c in base)
     rd = predict(comps, CIRCUITS[circuit]["probes"], has_led)
     return {k: (v if k == "LED" else round(v * (1 + random.uniform(-0.01, 0.01)), 4)) for k, v in rd.items()}
-
-
+ 
+ 
 class Handler(BaseHTTPRequestHandler):
     def _send(self, code, body, ctype="application/json"):
         data = body if isinstance(body, bytes) else json.dumps(body).encode()
@@ -39,7 +40,7 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", str(len(data)))
         self.end_headers()
         self.wfile.write(data)
-
+ 
     def do_GET(self):
         if self.path == "/api/circuits":
             self._send(200, circuits_info())
@@ -48,7 +49,7 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(200, f.read(), "text/html; charset=utf-8")
         else:
             self._send(404, {"error": "not found"})
-
+ 
     def do_POST(self):
         try:
             req = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
@@ -62,15 +63,16 @@ class Handler(BaseHTTPRequestHandler):
             self._send(400, {"error": f"bad request: {e}"})
         except Exception as e:  # never drop the connection silently
             self._send(500, {"error": f"server error: {e}"})
-
+ 
     def log_message(self, *args):
         pass
-
-
+ 
+ 
 def main(port=8000):
     print(f"REPAIR-AI running at http://127.0.0.1:{port}  (Ctrl+C to stop)")
     ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
-
-
+ 
+ 
 if __name__ == "__main__":
     main()
+ 
